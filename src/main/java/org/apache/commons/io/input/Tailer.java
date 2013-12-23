@@ -163,6 +163,7 @@ public class Tailer implements Runnable {
      */
     private volatile boolean run = true;
 
+    private boolean resetFilePositionIfOverwrittenWithTheSameLength;
     /**
      * Creates a Tailer for the given file, starting from the beginning, with the default delay of 1.0s.
      * @param file The file to follow.
@@ -227,7 +228,7 @@ public class Tailer implements Runnable {
      * @param bufSize Buffer size
      */
     public Tailer(final File file, final TailerListener listener, final long delayMillis, final boolean end, final boolean reOpen, final int bufSize) {
-        this(file, DEFAULT_CHARSET, listener, delayMillis, end, reOpen, bufSize);
+        this(file, DEFAULT_CHARSET, listener, delayMillis, end, reOpen, bufSize, true);
     }
 
     /**
@@ -241,7 +242,7 @@ public class Tailer implements Runnable {
      * @param bufSize Buffer size
      */
     public Tailer(final File file, final Charset cset, final TailerListener listener, final long delayMillis, final boolean end, final boolean reOpen
-            , final int bufSize) {
+            , final int bufSize, boolean resetFilePositionIfOverwrittenWithTheSameLength) {
         this.file = file;
         this.delayMillis = delayMillis;
         this.end = end;
@@ -253,6 +254,7 @@ public class Tailer implements Runnable {
         listener.init(this);
         this.reOpen = reOpen;
         this.cset = cset; 
+        this.resetFilePositionIfOverwrittenWithTheSameLength = resetFilePositionIfOverwrittenWithTheSameLength;
     }
 
     /**
@@ -299,7 +301,7 @@ public class Tailer implements Runnable {
      */
     public static Tailer create(final File file, final Charset charset, final TailerListener listener, final long delayMillis, final boolean end, final boolean reOpen
             ,final int bufSize) {
-        final Tailer tailer = new Tailer(file, charset, listener, delayMillis, end, reOpen, bufSize);
+        final Tailer tailer = new Tailer(file, charset, listener, delayMillis, end, reOpen, bufSize, true);
         final Thread thread = new Thread(tailer);
         thread.setDaemon(true);
         thread.start();
@@ -385,6 +387,10 @@ public class Tailer implements Runnable {
         return delayMillis;
     }
 
+    public void disable_reset_file_position() {
+        this.resetFilePositionIfOverwrittenWithTheSameLength = false;
+    }
+
     /**
      * Follows changes in the file, calling the TailerListener's handle method for each new line.
      */
@@ -448,11 +454,13 @@ public class Tailer implements Runnable {
                          * This can happen if the file is truncated or overwritten with the exact same length of
                          * information. In cases like this, the file position needs to be reset
                          */
-                        position = 0;
-                        reader.seek(position); // cannot be null here
+                        if (resetFilePositionIfOverwrittenWithTheSameLength) {
+                            position = 0;
+                            reader.seek(position); // cannot be null here
 
-                        // Now we can read new lines
-                        position = readLines(reader);
+                            // Now we can read new lines
+                            position = readLines(reader);
+                        }
                         last = file.lastModified();
                     }
                 }
